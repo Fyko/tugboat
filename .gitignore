@@ -1,0 +1,9 @@
+.DS_Store
+
+**/*.rs.bk
+wasm-pack.log
+
+build/
+/target
+/dist
+.env

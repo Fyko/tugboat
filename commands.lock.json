@@ -1,0 +1,6 @@
+[
+	{
+		"name": "ping",
+		"description": "checks that the bot is responding"
+	}
+]

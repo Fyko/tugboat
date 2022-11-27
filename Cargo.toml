@@ -1,0 +1,27 @@
+[package]
+name = "tugboat"
+version = "0.1.0"
+edition = "2021"
+
+# [workspace]
+# members = ["framework"]
+
+[dependencies]
+axum = { version = "0.6.0" }
+reqwest = "0.11"
+lazy_static = "1"
+# framework = { path = "./framework" }
+futures = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+twilight-http = "=0.13"
+twilight-model = "=0.13"
+twilight-util = { version = "=0.13", features = ["full"] }
+tower = { version = "0.4", features = ["util"] }
+tower-http = "0.3"
+anyhow = "1"
+ed25519-dalek = "1"
+hex = "0.4"
