@@ -1,3 +1,4 @@
+use std::pin::Pin;
 use std::sync::RwLock;
 use std::{collections::HashMap, process::Command};
 
@@ -37,8 +38,10 @@ where
     }
 }
 
-pub struct InteractionRouter<T = CommandData> {
-    pub commands: RwLock<HashMap<String, T>>,
+type BoxedCommandHandler = Box<dyn Fn(CommandData) -> Pin<Box<dyn Future<Output = Response<()>> + Send>> + Send + Sync>;
+
+pub struct InteractionRouter {
+    pub commands: RwLock<HashMap<String, Box<dyn Fn(CommandData) -> Pin<Box<Response<()>>>>>>,
 }
 
 pub trait FromRequest: Sized {
@@ -46,11 +49,7 @@ pub trait FromRequest: Sized {
     type Future: Future<Output = Result<Self>>;
 }
 
-impl<F> InteractionRouter<F>
-where
-    F: CommandHandler<CommandData>,
-    F::Output: Responder + 'static,
-{
+impl InteractionRouter {
     pub fn new() -> Self {
         InteractionRouter {
             commands: RwLock::new(HashMap::new()),
@@ -58,11 +57,7 @@ where
     }
 
     /// Register a command handler
-    pub fn command(&self, name: impl Into<CommandPath>, func: F) -> &Self
-    where
-        F: CommandHandler<CommandData>,
-        F::Output: Responder + 'static,
-    {
+    pub fn command(&self, name: impl Into<CommandPath>, func: impl Fn(CommandData) -> Response<()>) -> &Self {
         let path: CommandPath = name.into();
         let hash = match path {
             CommandPath::Root(x) => x.to_string(),
@@ -70,7 +65,11 @@ where
         };
 
         if let Ok(mut lock) = self.commands.write() {
-            lock.insert(hash, func);
+            let boxed = Box::new(move |command: CommandData| {
+                Box::pin(func(command))
+            });
+
+            lock.insert(hash, boxed);
         }
 
         self
@@ -106,9 +105,9 @@ where
                     return handler(data);
                 }
 
-                error!("No handler found for command {}", hash);
+                tracing::error!("No handler found for command {}", hash);
 
-                anyhow!("No handler found for command {}", hash);
+                anyhow::anyhow!("No handler found for command {}", hash);
             }
             _ => unreachable!(),
         }
@@ -129,14 +128,14 @@ where
             InteractionType::ApplicationCommandAutocomplete => todo!(),
             InteractionType::MessageComponent => todo!(),
             _ => {
-                error!("Unhandled interaction type received! {:?}", interaction);
+                tracing::error!("Unhandled interaction type received! {:?}", interaction);
                 Response::error("Unhandled interaction type received!", 500)
             }
         }
     }
 
     pub async fn handle_request(&self, req: Request<Body>, body: Bytes) -> Result<Response<()>> {
-        let public_key = env::var("DISCORD_PUBLIC_KEY")?.to_string();
+        let public_key = std::env::var("DISCORD_PUBLIC_KEY")?.to_string();
         let public_key = PublicKey::from_bytes(hex::decode(public_key).unwrap().as_ref()).unwrap();
 
         let headers = req.headers().to_owned();
@@ -153,11 +152,11 @@ where
                     {
                         match serde_json::from_slice(&body) {
                             Ok(interaction) => {
-                                info!("interaction: {:#?}", interaction);
+                                tracing::info!("interaction: {:#?}", interaction);
                                 return self.handle_interaction(interaction).await;
                             }
                             Err(e) => {
-                                info!("Error deserializing interaction: {}", e);
+                                tracing::info!("Error deserializing interaction: {}", e);
                                 return Response::error("Error deserializing interaction", 400);
                             }
                         }

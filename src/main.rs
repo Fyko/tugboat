@@ -29,7 +29,7 @@ fn ping() -> impl Responder {
 }
 
 fn create_interaction_router() -> InteractionRouter {
-    let router = InteractionRouter::new();
+    let router = InteractionRouter::<CommandData>::new();
     router.command("ping", ping);
 
     router
